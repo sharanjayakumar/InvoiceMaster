@@ -18,7 +18,7 @@ var storage = multer.diskStorage({
     cb(null, 'uploads/')
   },
   filename: function (req, file, cb) {
-    cb(null, Date.now() + path.extname(file.originalname)) //Appending extension
+    cb(null, Date.now() + path.extname(file.originalname))
   }
 })
 
@@ -29,33 +29,37 @@ router.get("/userlogin", async (req, res) => {
 })
 
 router.post("/userlogin/register", [
-     upload.single("profile"),
-    check('email').isEmail().isLength({ min: 10, max: 30 }),
-    check('password', 'Password length should be 8 to 10 characters')
-        .isLength({ min: 8, max: 10 }),
-    
-   
+    upload.single("profile"),
+    check('fullname').isLength({ min: 4 }).withMessage("Full name must be at least 4 characters"),
+    check('email').isEmail().isLength({ min: 10 }).withMessage("Enter a valid email"),
+    check('password', 'Password must be at least 8 characters long').isLength({ min: 8 }),
+    check('cpassword', 'Confirm password is required').exists()
 ], async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-        return res.send({ errors: errors.array() });
+        return res.status(400).send({ errors: errors.array() });
+    }
+
+    if (req.body.password !== req.body.cpassword) {
+        return res.status(400).send({ message: "Passwords do not match" });
     }
 
     try {
-        const userdata = await userlogin.findOne({ userEmail: req.body.email });
-        if (userdata) {
-            return res.send({ message: "User already found" });
+        const existingUser = await userlogin.findOne({ email: req.body.email });
+        if (existingUser) {
+            return res.status(409).send({ message: "User already exists" });
         }
 
         const hash = await bcrypt.hash(req.body.password, 10);
-        const login = new userlogin({
+        const newUser = new userlogin({
+            fullname: req.body.fullname,
+            email: req.body.email,
             password: hash,
-            email:req.body.email,
-            profile:req.file ? req.file.filename : 'default.jpg' 
+            profile: req.file ? req.file.filename : 'default.jpg'
         });
 
-        await login.save();
-        return res.send({ message: "Registration successful" });
+        await newUser.save();
+        return res.status(201).send({ message: "Registration successful" });
     } catch (err) {
         console.error(err);
         return res.status(500).send({ message: "Server error" });
@@ -80,4 +84,4 @@ router.post("/userlogin/verify", async (req, res) => {
     }
 });
 
-router.post
+module.exports = router
